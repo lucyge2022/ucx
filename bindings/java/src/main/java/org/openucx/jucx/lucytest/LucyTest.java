@@ -189,6 +189,7 @@ public class LucyTest {
 
   InetSocketAddress serverAddr_ = new InetSocketAddress("172.31.21.70", 1234);
   long tagFileIdMask_ = 0xFFFFFFFFFFFF0000L;
+  long fullMask_ = 0xFFFFFFFFFFFFFFFFL;
 
   public void runTestServer() throws Exception {
     UcpWorker worker = globalContext_.newWorker(new UcpWorkerParams());
@@ -208,6 +209,8 @@ public class LucyTest {
         .setConnectionHandler(new UcpListenerConnectionHandler() {
           @Override
           public void onConnectionRequest(UcpConnectionRequest connectionRequest) {
+            System.out.println("Incoming req from client:" +
+                connectionRequest.getClientAddress());
             UcpEndpoint acceptedRemoteEp = worker.newEndpoint(
                 new UcpEndpointParams()
                     .setPeerErrorHandlingMode()
@@ -233,7 +236,25 @@ public class LucyTest {
       System.out.println("Accepted remote ep connection, localAddr:"
           + remoteClientEp.getLocalAddress() + ", remoteAddr:"
           + remoteClientEp.getRemoteAddress());
-      LucyTest.sendFile(worker, remoteClientEp);
+
+      UcpRequest sendReq1 = sendMesgToClient(remoteClientEp, "LUCY1", 1111);
+//      while (!sendReq1.isCompleted()) {
+//        try {
+//          worker.progress();
+//        } catch (Exception e) {
+//          throw new RuntimeException(e);
+//        }
+//      }
+      UcpRequest sendReq2 = sendMesgToClient(remoteClientEp, "LUCY2", 1111);
+      while (!sendReq2.isCompleted() || !sendReq1.isCompleted()) {
+        try {
+          worker.progress();
+        } catch (Exception e) {
+          throw new RuntimeException(e);
+        }
+      }
+      System.out.println("Both sendReq completed.");
+//      LucyTest.sendFile(worker, remoteClientEp);
     } catch (Exception e) {
       logUtil("exception in runTestServer", e);
       throw e;
@@ -372,6 +393,16 @@ public class LucyTest {
     }
   };
 
+  public UcpRequest sendMesgToClient(UcpEndpoint remoteEp, String msg,
+                                     long tag) {
+    ByteBuffer msgbuf = ByteBuffer.allocateDirect(msg.getBytes().length);
+    msgbuf.put(msg.getBytes());
+    msgbuf.clear();
+    // should use release in callback but i'm not for now
+    UcpRequest request = remoteEp.sendTaggedNonBlocking(msgbuf, tag, null);
+    return request;
+  }
+
   public void runTestClient() {
     UcpWorker worker = globalContext_.newWorker(new UcpWorkerParams());
     // client will receive from server
@@ -379,6 +410,52 @@ public class LucyTest {
     System.out.println("connected: localaddr:" + serverEp.getLocalAddress()
         + " remote addr:" + serverEp.getRemoteAddress());
 
+    if (2 > 1) {
+      ByteBuffer recvbuf1 = ByteBuffer.allocateDirect(5);
+      ByteBuffer recvbuf2 = ByteBuffer.allocateDirect(5);
+      UcpRequest recvReq1 =
+          worker.recvTaggedNonBlocking(recvbuf1, 1111, 0, new UcxCallback() {
+            public void onSuccess(UcpRequest request) {
+              System.out.println("recvBuf1 onSuccess");
+            }
+          });
+      UcpRequest recvReq2 =
+          worker.recvTaggedNonBlocking(recvbuf2, 1111, 0, new UcxCallback() {
+            public void onSuccess(UcpRequest request) {
+              System.out.println("recvBuf2 onSuccess");
+            }
+          });
+      while (!recvReq1.isCompleted() || !recvReq2.isCompleted()) {
+        try {
+          worker.progress();
+        } catch (Exception e) {
+          e.printStackTrace();
+//          throw new RuntimeException(e);
+        }
+      }
+      recvbuf1.clear();
+      byte[] bytes1 = new byte[recvbuf1.capacity()];
+      recvbuf1.get(bytes1);
+      String msg1 = new String(bytes1);
+      recvbuf1.clear();
+//      UcpRequest recvReq2 =
+//          worker.recvTaggedNonBlocking(recvbuf1, 1111, 0, null);
+//      while (!recvReq2.isCompleted()) {
+//        try {
+//          worker.progress();
+//        } catch (Exception e) {
+//          throw new RuntimeException(e);
+//        }
+//      }
+      recvbuf2.clear();
+      byte[] bytes2 = new byte[recvbuf2.capacity()];
+      recvbuf2.get(bytes2);
+      String msg2 = new String(bytes2);
+      System.out.println("received, msg1:" + msg1
+          + ",msg2:" + msg2);
+//      System.out.println("received: msg1:"  +msg1);
+      return;
+    }
     FileChannel fileChannel = null;
     String recvFileName = "/tmp/recv_file";
     try {
