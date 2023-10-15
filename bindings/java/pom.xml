@@ -7,7 +7,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.openucx</groupId>
   <artifactId>jucx</artifactId>
-  <version>@VERSION@</version>
+  <version>LATEST</version>
   <packaging>jar</packaging>
   <name>jucx</name>
   <url>https://github.com/openucx/ucx</url>
