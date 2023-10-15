@@ -24,7 +24,8 @@ public class UcpLucyTest {
       public void run() {
         System.out.println("Start runTestClient...");
         LucyTest lucyTestClient = new LucyTest();
-        lucyTestClient.runTestClient();
+//        lucyTestClient.runTestClient();
+        lucyTestClient.runTestStreamClient();
       }
     });
     t1.start();
