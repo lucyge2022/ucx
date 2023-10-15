@@ -39,11 +39,11 @@
     <gpg.defaultKeyring>false</gpg.defaultKeyring>
 <!--    <gpg.passphrase>${env.GPG_PASSPHRASE}</gpg.passphrase>-->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-<!--    <ucx.src.dir>@abs_top_srcdir@/src</ucx.src.dir>-->
-    <ucx.src.dir>/Users/lucyge/Documents/github/ucx/src</ucx.src.dir>
+    <ucx.src.dir>@abs_top_srcdir@/src</ucx.src.dir>
+<!--    <ucx.src.dir>/Users/lucyge/Documents/github/ucx/src</ucx.src.dir>-->
     <jucx.src.dir>${ucx.src.dir}/../bindings/java</jucx.src.dir>
-<!--    <ucx.build.dir>@abs_top_builddir@</ucx.build.dir>-->
-    <ucx.build.dir>/Users/lucyge/Documents/github/ucx/buildlib</ucx.build.dir>
+    <ucx.build.dir>@abs_top_builddir@</ucx.build.dir>
+<!--    <ucx.build.dir>/Users/lucyge/Documents/github/ucx/buildlib</ucx.build.dir>-->
     <native.dir>${ucx.build.dir}/bindings/java/src/main/native</native.dir>
     <ucm.lib.path>${ucx.build.dir}/src/ucm/.libs</ucm.lib.path>
     <ucs.lib.path>${ucx.build.dir}/src/ucs/.libs</ucs.lib.path>
