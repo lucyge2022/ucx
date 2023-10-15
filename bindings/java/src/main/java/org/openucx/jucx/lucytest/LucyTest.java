@@ -5,6 +5,7 @@ import static java.nio.file.StandardOpenOption.DELETE_ON_CLOSE;
 import static java.nio.file.StandardOpenOption.READ;
 import static java.nio.file.StandardOpenOption.WRITE;
 
+import com.sun.org.apache.xpath.internal.operations.Bool;
 import org.openucx.jucx.UcxCallback;
 import org.openucx.jucx.UcxException;
 import org.openucx.jucx.UcxUtils;
@@ -43,10 +44,12 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -59,9 +62,10 @@ import java.util.stream.Stream;
 
 public class LucyTest {
   public static final String RANDOM_TEXT = "ABCDEFG-LUCY";
-  public static final int MEM_SIZE = 64;
+  public static final int MEM_SIZE = 4096;
   public static final String FILE_TO_SEND = "/root/testfile1";
   public static UcpContext globalContext_;
+  public static Random random_ = new Random();
 
   public LucyTest() {
     globalContext_ = new UcpContext(new UcpParams()
@@ -79,10 +83,12 @@ public class LucyTest {
       LucyTest lucyTest = new LucyTest();
       if (args[0].equalsIgnoreCase("client")) {
         System.out.println("Start runTestClient...");
-        lucyTest.runTestClient();
+//        lucyTest.runTestClient();
+        lucyTest.runTestStreamClient();
       } else if (args[0].equalsIgnoreCase("server")) {
         System.out.println("Start runTestServer...");
-        lucyTest.runTestServer();
+//        lucyTest.runTestServer();
+        lucyTest.runTestStreamServer();
       }
     } catch (Exception e) {
       e.printStackTrace();
@@ -191,6 +197,64 @@ public class LucyTest {
   long tagFileIdMask_ = 0xFFFFFFFFFFFF0000L;
   long fullMask_ = 0xFFFFFFFFFFFFFFFFL;
 
+  public void testServerTagAPIs(UcpEndpoint remoteClientEp, UcpWorker worker) {
+    UcpRequest sendReq1 = sendMesgToClient(remoteClientEp, "LUCY1", 1111);
+//      while (!sendReq1.isCompleted()) {
+//        try {
+//          worker.progress();
+//        } catch (Exception e) {
+//          throw new RuntimeException(e);
+//        }
+//      }
+    UcpRequest sendReq2 = sendMesgToClient(remoteClientEp, "LUCY2", 1111);
+    while (!sendReq2.isCompleted() || !sendReq1.isCompleted()) {
+      try {
+        worker.progress();
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    }
+    System.out.println("Both sendReq completed.");
+//      LucyTest.sendFile(worker, remoteClientEp);
+  }
+
+  public void testServerStreamAPIs(UcpEndpoint remoteClientEp, UcpWorker worker) {
+    long[] sizes = new long[] {8, MEM_SIZE};
+    ByteBuffer[] buffers = new ByteBuffer[2];
+    buffers[0] = ByteBuffer.allocateDirect((int)sizes[0]);
+    int randInt = random_.nextInt();
+    buffers[0].putInt(randInt); buffers[0].clear();
+    buffers[1] = ByteBuffer.allocateDirect((int)sizes[1]);
+    byte[] randomContent = new byte[MEM_SIZE];
+    random_.nextBytes(randomContent);
+    String md5 = ReadRequest.hash(new String(randomContent));
+    System.out.println("Server generating int:" + randInt + ",random content md5:" + md5);
+    buffers[1].put(randomContent); buffers[1].clear();
+    long[] addresses = new long[2];
+    addresses[0] = UcxUtils.getAddress(buffers[0]);
+    addresses[1] = UcxUtils.getAddress(buffers[1]);
+
+    UcpRequest ucpRequest = remoteClientEp.sendStreamNonBlocking(addresses, sizes,
+        new UcxCallback() {
+          public void onSuccess(UcpRequest request) {
+            System.out.println("OnSuccess sending stream buffers.");
+          }
+
+          public void onError(int ucsStatus, String errorMsg) {
+            System.out.println("onError sending stream buffers, errMsg:" + errorMsg);
+            throw new UcxException(errorMsg);
+          }
+        });
+    while (!ucpRequest.isCompleted()) {
+      try {
+        worker.progressRequest(ucpRequest);
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    }
+    System.out.println("Done testServerStreamAPIs.");
+  }
+
   public void runTestServer() throws Exception {
     UcpWorker worker = globalContext_.newWorker(new UcpWorkerParams());
     // rdma worker params for rdma Send/Receive with TAG matching?? check UcpEndpointTest.testSendRecv
@@ -237,24 +301,10 @@ public class LucyTest {
           + remoteClientEp.getLocalAddress() + ", remoteAddr:"
           + remoteClientEp.getRemoteAddress());
 
-      UcpRequest sendReq1 = sendMesgToClient(remoteClientEp, "LUCY1", 1111);
-//      while (!sendReq1.isCompleted()) {
-//        try {
-//          worker.progress();
-//        } catch (Exception e) {
-//          throw new RuntimeException(e);
-//        }
-//      }
-      UcpRequest sendReq2 = sendMesgToClient(remoteClientEp, "LUCY2", 1111);
-      while (!sendReq2.isCompleted() || !sendReq1.isCompleted()) {
-        try {
-          worker.progress();
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }
-      System.out.println("Both sendReq completed.");
-//      LucyTest.sendFile(worker, remoteClientEp);
+      // test stream apis
+      testServerStreamAPIs(remoteClientEp, worker);
+      // test tag apis
+//      testServerTagAPIs(remoteClientEp, worker);
     } catch (Exception e) {
       logUtil("exception in runTestServer", e);
       throw e;
@@ -299,6 +349,7 @@ public class LucyTest {
     // Create and connect an endpoint to remote.
     UcpEndpoint epToServer = worker.newEndpoint(
         new UcpEndpointParams()
+            .sendClientId()
             .setPeerErrorHandlingMode()
             .setErrorHandler((ep, status, errorMsg) ->
                 System.out.println("[ERROR] creating ep to remote:"
@@ -401,6 +452,53 @@ public class LucyTest {
     // should use release in callback but i'm not for now
     UcpRequest request = remoteEp.sendTaggedNonBlocking(msgbuf, tag, null);
     return request;
+  }
+
+  public void runTestStreamServer() {
+    try {
+      runTestServer();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public void runTestStreamClient() {
+    UcpWorker worker = globalContext_.newWorker(new UcpWorkerParams());
+    // client will receive from server
+    UcpEndpoint serverEp = connectToServer(worker);
+    System.out.println("connected: localaddr:" + serverEp.getLocalAddress()
+        + " remote addr:" + serverEp.getRemoteAddress());
+
+    long[] sizes = new long[] {8, MEM_SIZE};
+    ByteBuffer[] buffers = new ByteBuffer[2];
+    buffers[0] = ByteBuffer.allocateDirect((int)sizes[0]);
+    buffers[1] = ByteBuffer.allocateDirect((int)sizes[1]);
+    long[] addresses = new long[2];
+    addresses[0] = UcxUtils.getAddress(buffers[0]);
+    addresses[1] = UcxUtils.getAddress(buffers[1]);
+    UcpRequest recvReq = serverEp.recvStreamNonBlocking(addresses, sizes, UcpConstants.UCP_STREAM_RECV_FLAG_WAITALL,
+        new UcxCallback() {
+          public void onSuccess(UcpRequest request) {
+            System.out.println("Received streamed req...");
+          }
+
+          public void onError(int ucsStatus, String errorMsg) {
+            System.out.println("Error receiving streamed req, errMsg:" + errorMsg);
+            throw new UcxException(errorMsg);
+          }
+        });
+    while (!recvReq.isCompleted()) {
+      try {
+        worker.progressRequest(recvReq);
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    }
+    Arrays.stream(buffers).forEach(b -> b.clear());
+    System.out.println("received req, buf0:" + buffers[0].getInt());
+    byte[] buf1bytes = new byte[buffers[1].remaining()];
+    buffers[1].get(buf1bytes);
+    System.out.println("received req, buf1 md5:" + ReadRequest.hash(new String(buf1bytes)));
   }
 
   public void runTestClient() {
