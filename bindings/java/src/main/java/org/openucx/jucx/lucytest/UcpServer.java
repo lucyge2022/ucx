@@ -14,8 +14,6 @@ package org.openucx.jucx.lucytest;
 //import alluxio.util.io.BufferPool;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.google.protobuf.InvalidProtocolBufferException;
-import org.apache.logging.log4j.core.net.Protocol;
 import org.openucx.jucx.UcxCallback;
 import org.openucx.jucx.ucp.UcpConnectionRequest;
 import org.openucx.jucx.ucp.UcpContext;
@@ -182,8 +180,7 @@ public class UcpServer {
   }
 
 
-  public static ReadRequest parseReadRequest(ByteBuffer buf)
-      throws InvalidProtocolBufferException {
+  public static ReadRequest parseReadRequest(ByteBuffer buf) {
     int contentLen = buf.getInt();
     buf.limit(buf.position() + contentLen);
     ReadRequest request = ReadRequest.parseFrom(buf);
@@ -239,11 +236,7 @@ public class UcpServer {
       if (remoteEp == null) {
         throw new RuntimeException("unrecognized peerinfo:" + peerInfo.toString());
       }
-      try {
-        readRequest = parseReadRequest(recvBuffer);
-      } catch (InvalidProtocolBufferException e) {
-        throw new RuntimeException(e);
-      }
+      readRequest = parseReadRequest(recvBuffer);
     }
   }
 
