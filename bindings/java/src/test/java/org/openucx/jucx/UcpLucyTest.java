@@ -2,6 +2,7 @@ package org.openucx.jucx;
 
 import org.junit.Test;
 import org.openucx.jucx.lucytest.LucyTest;
+import org.openucx.jucx.ucp.UcpRequest;
 
 public class UcpLucyTest {
 

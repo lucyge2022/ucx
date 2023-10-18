@@ -1,5 +1,8 @@
 package org.openucx.jucx.lucytest;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -56,6 +59,19 @@ public class ReadRequest {
     buf.get(str);
     String ufsPath = new String(str);
     return new ReadRequest(ufsPath, offSet, length);
+  }
+
+  public ByteBuffer toBuffer() throws IOException {
+    try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+         DataOutputStream dos = new DataOutputStream(baos);) {
+      dos.writeLong(mOffset);
+      dos.writeLong(mLength);
+      dos.write(getUfsPath().length());
+      dos.write(getUfsPath().getBytes());
+      byte[] bytes = baos.toByteArray();
+      ByteBuffer buf = ByteBuffer.allocateDirect(bytes.length);
+      return buf;
+    }
   }
 
   public String getUfsPath() {

@@ -13,6 +13,7 @@ import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -20,6 +21,8 @@ public class MockCacheManager {
   public ConcurrentHashMap<PageId, PageInfo> pageMetaStore = new ConcurrentHashMap<>();
   public UcpContext mGlobalContext;
   public ReentrantLock mInstanceLock = new ReentrantLock();
+  public static Random mRandom = new Random();
+  public static final long WORKER_PAGE_SIZE = 1*1024*1024L;
 
   public static class PageId {
     public String mFileId;
@@ -43,16 +46,27 @@ public class MockCacheManager {
     mGlobalContext = globalContext;
   }
 
-  public Optional<UcpMemory> get(PageId pageId, int pageOffset, int bytesToRead)
+  public static byte[] generateRandomData(int length) {
+    byte[] bytes = new byte[length];
+    mRandom.nextBytes(bytes);
+    return bytes;
+  }
+
+  public void cache(String ufsPathFile, long length) {
+//    for (int bytesGened = 0; bytesGened < length;) {
+//      int genLen = Math.min((int)length - bytesGened, 4096);
+//      byte[] data = generateRandomData(genLen);
+//      bytesGened += genLen;
+//    }
+  }
+
+  public Optional<UcpMemory> get(String absFilePath, int offset, int bytesToRead)
       throws IOException {
-    PageInfo pageInfo = pageMetaStore.get(pageId);
-    if (pageInfo == null) {
-      throw new IOException("No such page : " + pageId);
-    }
-    Path filePath = new File(pageInfo.mFilePath).toPath();
+    File file = new File(absFilePath);
+    Path filePath = file.toPath();
     FileChannel fileChannel = FileChannel.open(filePath, READ);
     MappedByteBuffer buf = fileChannel.map(FileChannel.MapMode.READ_ONLY,
-        pageOffset, bytesToRead);
+        offset, bytesToRead);
     UcpMemory mmapedMemory = mGlobalContext.memoryMap(new UcpMemMapParams()
         .setAddress(UcxUtils.getAddress(buf))
         .setLength(bytesToRead).nonBlocking());

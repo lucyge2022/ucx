@@ -39,9 +39,11 @@
     <gpg.defaultKeyring>false</gpg.defaultKeyring>
 <!--    <gpg.passphrase>${env.GPG_PASSPHRASE}</gpg.passphrase>-->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- CHANGE ME TO ucx abs src path-->
     <ucx.src.dir>@abs_top_srcdir@/src</ucx.src.dir>
 <!--    <ucx.src.dir>/Users/lucyge/Documents/github/ucx/src</ucx.src.dir>-->
     <jucx.src.dir>${ucx.src.dir}/../bindings/java</jucx.src.dir>
+    <!-- CHANGE ME TO ucx abs build path ucx/buildlib/-->
     <ucx.build.dir>@abs_top_builddir@</ucx.build.dir>
 <!--    <ucx.build.dir>/Users/lucyge/Documents/github/ucx/buildlib</ucx.build.dir>-->
     <native.dir>${ucx.build.dir}/bindings/java/src/main/native</native.dir>

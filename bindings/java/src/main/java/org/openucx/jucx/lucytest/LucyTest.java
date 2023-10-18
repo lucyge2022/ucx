@@ -218,18 +218,23 @@ public class LucyTest {
 //      LucyTest.sendFile(worker, remoteClientEp);
   }
 
-  public void testServerStreamAPIs(UcpEndpoint remoteClientEp, UcpWorker worker) {
+  public UcpRequest testServerStreamAPIs(UcpEndpoint remoteClientEp, UcpWorker worker, int reqSeq) {
     long[] sizes = new long[] {8, MEM_SIZE};
     ByteBuffer[] buffers = new ByteBuffer[2];
     buffers[0] = ByteBuffer.allocateDirect((int)sizes[0]);
-    int randInt = random_.nextInt();
-    buffers[0].putInt(randInt); buffers[0].clear();
+    buffers[0].putInt(reqSeq); buffers[0].clear();
     buffers[1] = ByteBuffer.allocateDirect((int)sizes[1]);
     byte[] randomContent = new byte[MEM_SIZE];
     random_.nextBytes(randomContent);
     String md5 = ReadRequest.hash(new String(randomContent));
-    System.out.println("Server generating int:" + randInt + ",random content md5:" + md5);
+    System.out.println("Server generating int:" + reqSeq + ",random content md5:" + md5);
     buffers[1].put(randomContent); buffers[1].clear();
+
+    int firstInt = reqSeq;
+    int secondInt = buffers[1].getInt();
+    buffers[1].clear();
+    System.out.println("ints:" + firstInt + "," + secondInt);
+
     long[] addresses = new long[2];
     addresses[0] = UcxUtils.getAddress(buffers[0]);
     addresses[1] = UcxUtils.getAddress(buffers[1]);
@@ -245,14 +250,7 @@ public class LucyTest {
             throw new UcxException(errorMsg);
           }
         });
-    while (!ucpRequest.isCompleted()) {
-      try {
-        worker.progressRequest(ucpRequest);
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    }
-    System.out.println("Done testServerStreamAPIs.");
+    return ucpRequest;
   }
 
   public void runTestServer() throws Exception {
@@ -302,7 +300,16 @@ public class LucyTest {
           + remoteClientEp.getRemoteAddress());
 
       // test stream apis
-      testServerStreamAPIs(remoteClientEp, worker);
+      UcpRequest req2= testServerStreamAPIs(remoteClientEp, worker, 2);
+      UcpRequest req1= testServerStreamAPIs(remoteClientEp, worker, 1);
+      if (!req2.isCompleted()) {
+        logUtil("progressing req2", null);
+        worker.progressRequest(req2);
+      }
+      if (!req1.isCompleted()) {
+        logUtil("progressing req1", null);
+        worker.progressRequest(req1);
+      }
       // test tag apis
 //      testServerTagAPIs(remoteClientEp, worker);
     } catch (Exception e) {
@@ -476,7 +483,9 @@ public class LucyTest {
     long[] addresses = new long[2];
     addresses[0] = UcxUtils.getAddress(buffers[0]);
     addresses[1] = UcxUtils.getAddress(buffers[1]);
-    UcpRequest recvReq = serverEp.recvStreamNonBlocking(addresses, sizes, UcpConstants.UCP_STREAM_RECV_FLAG_WAITALL,
+
+    ByteBuffer randomBuffer1 = ByteBuffer.allocateDirect(16);
+    UcpRequest recvReq1 = serverEp.recvStreamNonBlocking(UcxUtils.getAddress(randomBuffer1), 16, UcpConstants.UCP_STREAM_RECV_FLAG_WAITALL,
         new UcxCallback() {
           public void onSuccess(UcpRequest request) {
             System.out.println("Received streamed req...");
@@ -487,18 +496,29 @@ public class LucyTest {
             throw new UcxException(errorMsg);
           }
         });
-    while (!recvReq.isCompleted()) {
+    ByteBuffer randomBuffer2 = ByteBuffer.allocateDirect(16);
+    UcpRequest recvReq2 = serverEp.recvStreamNonBlocking(UcxUtils.getAddress(randomBuffer1), 16, UcpConstants.UCP_STREAM_RECV_FLAG_WAITALL,
+        new UcxCallback() {
+          public void onSuccess(UcpRequest request) {
+            System.out.println("Received streamed req...");
+          }
+
+          public void onError(int ucsStatus, String errorMsg) {
+            System.out.println("Error receiving streamed req, errMsg:" + errorMsg);
+            throw new UcxException(errorMsg);
+          }
+        });
+    while (!recvReq1.isCompleted() || !recvReq2.isCompleted()) {
       try {
-        worker.progressRequest(recvReq);
+        worker.progress();
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
     }
-    Arrays.stream(buffers).forEach(b -> b.clear());
-    System.out.println("received req, buf0:" + buffers[0].getInt());
-    byte[] buf1bytes = new byte[buffers[1].remaining()];
-    buffers[1].get(buf1bytes);
-    System.out.println("received req, buf1 md5:" + ReadRequest.hash(new String(buf1bytes)));
+    System.out.println("1 received req, randomBuffer:"
+        + randomBuffer1.getInt() + "," + randomBuffer1.getInt());
+    System.out.println("2 received req, randomBuffer:"
+        + randomBuffer2.getInt() + "," + randomBuffer2.getInt());
   }
 
   public void runTestClient() {
