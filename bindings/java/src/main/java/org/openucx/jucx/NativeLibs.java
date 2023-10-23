@@ -42,7 +42,7 @@ public class NativeLibs {
     private static void loadLibrary(String resourceName) {
         // Search shared object on java classpath
         URL url = loader.getResource(System.mapLibraryName(resourceName));
-
+        System.out.println("[LUCYDEBUG]url:" + url);
         if (url == null) {
             // If not found in classpath, try to load from java.library.path
             try {
@@ -61,6 +61,7 @@ public class NativeLibs {
 
         if (file != null && file.exists()) {
             String filename = file.getAbsolutePath();
+            System.out.println("[LUCYDEBUG]file:" + filename);
             try { // Load shared object to JVM
                 System.load(filename);
             } catch (UnsatisfiedLinkError ex) {

@@ -10,16 +10,21 @@ import org.junit.experimental.theories.DataPoints;
 import org.junit.experimental.theories.Theories;
 import org.junit.experimental.theories.Theory;
 import org.junit.runner.RunWith;
+import org.openucx.jucx.lucytest.ReadRequest;
 import org.openucx.jucx.ucp.*;
 import org.openucx.jucx.ucs.UcsConstants;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.*;
 
 @RunWith(Theories.class)
@@ -39,11 +44,21 @@ public class UcpEndpointTest extends UcxTest {
             UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA_MANAGED)) {
             resut.add(UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA_MANAGED);
         }
+        System.out.println("MEMORY_TYPE.UCS_MEMORY_TYPE_HOST:" + UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_HOST);
+        System.out.println("MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA:" + UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA);
+        System.out.println("MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA_MANAGED:" + UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA_MANAGED);
+        System.out.println(resut);
         return resut;
     }
 
     @Test
     public void testConnectToListenerByWorkerAddr() {
+        memTypes();
+        try {
+            testGetNB(UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_HOST);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
         UcpContext context = new UcpContext(new UcpParams().requestStreamFeature());
         UcpWorker worker = context.newWorker(new UcpWorkerParams());
         UcpEndpointParams epParams = new UcpEndpointParams().setUcpAddress(worker.getAddress())
@@ -102,6 +117,13 @@ public class UcpEndpointTest extends UcxTest {
         assertEquals("127.0.0.1", clientEndpoint.getRemoteAddress().getHostString());
     }
 
+    public void printRKeyBuffer(ByteBuffer rkeyBuffer) {
+        ByteBuffer rkeyCopy = rkeyBuffer.duplicate();
+        byte[] bytes = new byte[rkeyCopy.remaining()];
+        rkeyCopy.get(bytes);
+        System.out.println("rkeybuf len:" + bytes.length + ",to_str:" + new String(bytes));
+    }
+
     @Theory
     public void testGetNB(int memType) throws Exception {
         System.out.println("Running testGetNB with memType: " + memType);
@@ -131,8 +153,12 @@ public class UcpEndpointTest extends UcxTest {
         UcpMemory remote_memory1 = src1.getMemory();
         UcpMemory remote_memory2 = src2.getMemory();
 
-        UcpRemoteKey rkey1 = endpoint.unpackRemoteKey(remote_memory1.getRemoteKeyBuffer());
-        UcpRemoteKey rkey2 = endpoint.unpackRemoteKey(remote_memory2.getRemoteKeyBuffer());
+        ByteBuffer rkeyBuf1 = remote_memory1.getRemoteKeyBuffer();
+        ByteBuffer rkeyBuf2 = remote_memory1.getRemoteKeyBuffer();
+        printRKeyBuffer(rkeyBuf1);
+        printRKeyBuffer(rkeyBuf2);
+        UcpRemoteKey rkey1 = endpoint.unpackRemoteKey(rkeyBuf1);
+        UcpRemoteKey rkey2 = endpoint.unpackRemoteKey(rkeyBuf2);
 
         AtomicInteger numCompletedRequests = new AtomicInteger(0);
 
@@ -160,6 +186,13 @@ public class UcpEndpointTest extends UcxTest {
             worker1.progress();
             worker2.progress();
         }
+
+        CharBuffer charBuf1 = src1.getData().asCharBuffer().asReadOnlyBuffer();
+        String md51 = ReadRequest.hash(charBuf1.toString());
+        CharBuffer charBuf2 = src1.getData().asCharBuffer().asReadOnlyBuffer();
+        String md52 = ReadRequest.hash(charBuf1.toString());
+        System.out.println("charBuf1 len:" + charBuf1.length() + ", charBuf1 md5:" + md51);
+        System.out.println("charBuf2 len:" + charBuf2.length() + ", charBuf2 md5:" + md52);
 
         assertEquals(src1.getData().asCharBuffer(), dst1.getData().asCharBuffer());
         assertEquals(src2.getData().asCharBuffer(), dst2.getData().asCharBuffer());
